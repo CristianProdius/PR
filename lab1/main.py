@@ -1,5 +1,17 @@
 import requests
 from bs4 import BeautifulSoup
+import re
+
+def validate_price(price):
+    # Remove currency symbol and the comma separator and after that its convering to dlout
+    price_value = re.sub(r'[£,]', '', price)
+    try:
+        return float(price_value)
+    except ValueError:
+        return None
+    
+def validate_name(name):
+    return name and len(name.strip()) > 3
 
 #Base URL of the page to scrape
 base_url = 'http://books.toscrape.com/'
@@ -12,7 +24,13 @@ if response.status_code == 200:
         name = product.h3.a['title']
         price = product.find('p', class_='price_color').text
         link = product.h3.a['href']
-        products.append({'name': name, 'price': price, 'link': link})
+
+
+        # Validate the name and price
+        if validate_name(name) and (validate_price := validate_price(price)) is not None:
+            products.append({'name': name, 'price': price, 'link': link})
+        else:
+            print(f"Invalid product: {name} - {price}")
 
     
     # Function to scrape the product data futher
