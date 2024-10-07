@@ -1,11 +1,60 @@
+import os
 import requests
 from bs4 import BeautifulSoup
 import re
 from datetime import datetime, timezone
 from functools import reduce
 import socket
-import http.server
-import socketserver
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import json
+import xml.etree.ElementTree as ET
+
+
+#Request handler class for the HTTP server
+class RequestHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == '/':
+            self.send_response(200)
+            self.send_header('Content-type', 'text/html')
+            self.end_headers()
+            
+            # List files in the current directory
+            files = os.listdir('.')
+            file_list = '<br>'.join(files)
+            self.wfile.write(f"Files in the directory:<br>{file_list}".encode())
+        else:
+            super().do_GET()
+
+    def do_POST(self):
+        if self.path == '/upload':
+            content_length = int(self.headers['Content-Length'])
+            post_data = self.rfile.read(content_length)
+            content_type = self.headers['Content-Type']
+
+            if content_type == 'application/xml':
+                try:
+                    # Parse XML data
+                    root = ET.fromstring(post_data)
+                    # Process XML data here
+                    self.send_response(200)
+                    self.end_headers()
+                    self.wfile.write(b"XML data received successfully")
+                except ET.ParseError:
+                    self.send_error(400, "Invalid XML data")
+            elif content_type == 'application/json':
+                try:
+                    # Parse JSON data
+                    json_data = json.loads(post_data)
+                    # Process JSON data here
+                    self.send_response(200)
+                    self.end_headers()
+                    self.wfile.write(b"JSON data received successfully")
+                except json.JSONDecodeError:
+                    self.send_error(400, "Invalid JSON data")
+            else:
+                self.send_error(415, "Unsupported Media Type")
+        else:
+            self.send_error(404, "Not Found")
 
 
 class Product:
@@ -36,8 +85,8 @@ class Product:
         <name>{self.name}</name>
         <price>{self.price}</price>
         <link>{self.link}</link>
-        <description>{self.description if self.description else 'N/A'}</description>
-        <availability>{self.availability if self.availability else 'N/A'}</availability>
+        <description>{self.description}</description>
+        <availability>{self.availability}</availability>
         <currency>{self.currency}</currency>
         </product>
         """
@@ -293,11 +342,10 @@ test_serialization()
 
 def run_server():
     PORT = 8000
-    Handler = http.server.SimpleHTTPRequestHandler
-
-    with socketserver.TCPServer(("", PORT), Handler) as httpd:
-        print(f"Serving at port {PORT}")
-        httpd.serve_forever()
+    server_address = ('', PORT)
+    httpd = HTTPServer(server_address, RequestHandler)
+    print(f"Server running on port {PORT}")
+    httpd.serve_forever()
 
 if __name__ == "__main__":
     run_server()
