@@ -4,6 +4,9 @@ import re
 from datetime import datetime, timezone
 from functools import reduce
 import socket
+import http.server
+import socketserver
+
 
 class Product:
     def __init__(self, name, price, link, description=None, availability=None, currency='GBP'):
@@ -40,6 +43,110 @@ class Product:
         """
         return xml_str
     
+    #Serialization of the object
+    def serialize(self):
+        # Convert the Product object to a string representation
+        # Format: "Product:name:price:link:description:availability:currency"
+        return f"Product:{self.name}:{self.price}:{self.link}:{self.description}:{self.availability}:{self.currency}"
+
+    #Deserialization of the object
+    @classmethod #class method reciving cls indead of an instance of the class, cla is the clase itself aka Product
+    def deserialize(cls, data):
+        # Create a Product object from a serialized string
+        type_tag, content = data.split(':', 1)
+        if type_tag != 'Product':
+            raise ValueError(f"Invalid type tag for Product: {type_tag}")
+        # Split the content into individual attributes
+        name, price, link, description, availability, currency = content.split(':')
+        return cls(name, float(price), link, description, availability, currency)
+
+    #Serialization of the object
+    @staticmethod
+    def serialize_object(obj):
+        #Serialize various types of objects
+        if isinstance(obj, Product):
+            return obj.serialize()
+        elif isinstance(obj, list):
+            # For lists, serialize each item and join with commas
+            return f"List:{','.join(Product.serialize_object(item) for item in obj)}"
+        elif isinstance(obj, dict):
+             # For dicts, serialize each key-value pair and join with commas
+            return f"Dict:{','.join(f'{Product.serialize_object(k)}={Product.serialize_object(v)}' for k, v in obj.items())}"
+        elif isinstance(obj, str):
+            return f"Str:{obj}"
+        elif isinstance(obj, int):
+            return f"Int:{obj}"
+        elif isinstance(obj, float):
+            return f"Float:{obj}"
+        elif obj is None:
+            return "None:"
+        else:
+            raise TypeError(f"Type {type(obj)} not serializable")
+
+    #Deserialization of the object
+    @staticmethod
+    def deserialize_object(data):
+        # Deserialize objects based on their type tag
+        type_tag, *content = data.split(':', 1)
+        content = content[0] if content else ''
+
+        if type_tag == 'Product':
+            return Product.deserialize(data)
+        elif type_tag == 'List':
+            # For lists, split the content and deserialize each item
+            return [Product.deserialize_object(item) for item in content.split(',')] if content else []
+        elif type_tag == 'Dict':
+            # For dicts, split into key-value pairs and deserialize each pair
+            return {Product.deserialize_object(k): Product.deserialize_object(v) for k, v in [item.split('=') for item in content.split(',')]} if content else {}
+        elif type_tag == 'Str':
+            return content
+        elif type_tag == 'Int':
+            return int(content)
+        elif type_tag == 'Float':
+            return float(content)
+        elif type_tag == 'None':
+            return None
+        else:
+            raise ValueError(f"Unknown type tag: {type_tag}")
+
+    def __str__(self):
+        # Provide a readable string representation of the Product object
+        return f"Product(name='{self.name}', price={self.price}, link='{self.link}', description='{self.description}', availability='{self.availability}', currency='{self.currency}')"
+
+
+
+# Test the serialization and deserialization
+def test_serialization():
+    # Test with a Product object
+    product = Product("Book", 19.99, "/book", "A great book", "In stock")
+    serialized_product = product.serialize()
+    deserialized_product = Product.deserialize(serialized_product)
+    print("Product Test:")
+    print(f"Original: {product}")
+    print(f"Serialized: {serialized_product}")
+    print(f"Deserialized: {deserialized_product}")
+    print()
+    
+    # Test with a list of mixed types
+    mixed_list = [1, "two", 3.0, Product("Item", 9.99, "/item")]
+    serialized_list = Product.serialize_object(mixed_list)
+    deserialized_list = Product.deserialize_object(serialized_list)
+    print("List Test:")
+    print(f"Original: {mixed_list}")
+    print(f"Serialized: {serialized_list}")
+    print(f"Deserialized: {deserialized_list}")
+    print()
+
+    # Test with a dictionary
+    test_dict = {"key1": "value1", "key2": 2, "key3": Product("DictItem", 5.99, "/dictitem")}
+    serialized_dict = Product.serialize_object(test_dict)
+    deserialized_dict = Product.deserialize_object(serialized_dict)
+    print("Dictionary Test:")
+    print(f"Original: {test_dict}")
+    print(f"Serialized: {serialized_dict}")
+    print(f"Deserialized: {deserialized_dict}")
+    print()
+
 
 def validate_price(price):
     # Remove currency symbol and the comma separator and after that its convering to dlout
@@ -88,6 +195,9 @@ def get_http_response(url):
     response = response.decode('utf-8')
     headers, body = response.split('\r\n\r\n', 1)
     return body
+
+
+
 
 #Base URL of the page to scrape
 base_url = 'http://books.toscrape.com/'
@@ -176,3 +286,24 @@ try:
     
 except Exception as e:
     print(f"Failed to retrieve the webpage. Status code: {str(e)}")
+
+
+# Test the serialization and deserialization
+test_serialization()
+
+def run_server():
+    PORT = 8000
+    Handler = http.server.SimpleHTTPRequestHandler
+
+    with socketserver.TCPServer(("", PORT), Handler) as httpd:
+        print(f"Serving at port {PORT}")
+        httpd.serve_forever()
+
+if __name__ == "__main__":
+    run_server()
+
+
+#this 2 comand to build and run the docker image
+#docker build -t lab1-image .
+#docker run -p 8000:8000 lab1-image
+#http://localhost:8000/ to see the result
