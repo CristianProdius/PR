@@ -14,6 +14,33 @@ class Product:
         self.availability = availability
         self.currency = currency
 
+    #JSON representation of the object
+    def to_json(self):
+        json_str = f"""{{
+            "name": "{self.name}",
+            "price": {self.price},
+            "link": "{self.link}",
+            "description": "{self.description}" if self.description else "null",
+            "availability": "{self.availability}" if self.availability else "null",
+            "currency": "{self.currency}"
+        }}"""
+        return json_str
+    
+    #XML representation of the object
+    def to_xml(self):
+        xml_str = f"""
+        <product>
+        <name>{self.name}</name>
+        <price>{self.price}</price>
+        <link>{self.link}</link>
+        <description>{self.description if self.description else 'N/A'}</description>
+        <availability>{self.availability if self.availability else 'N/A'}</availability>
+        <currency>{self.currency}</currency>
+        </product>
+        """
+        return xml_str
+    
+
 def validate_price(price):
     # Remove currency symbol and the comma separator and after that its convering to dlout
     price_value = re.sub(r'[Â£,]', '', price)
@@ -136,5 +163,16 @@ try:
         print(f"Description: {product.description[:100] if product.description else 'N/A'}...")
         print(f"Availability: {product.availability if product.availability else 'N/A'}")
         print("---")
+
+    # Print JSON representation of the first filtered product as an example
+    if filtered_products:
+        print("\nJSON representation of the first filtered product:")
+        print(filtered_products[0].to_json())
+
+    # Print XML representation of the secound filtered product as an example
+    if filtered_products:
+        print("\nXML representation of the second filtered product:")
+        print(filtered_products[1].to_xml())
+    
 except Exception as e:
     print(f"Failed to retrieve the webpage. Status code: {str(e)}")
