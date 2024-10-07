@@ -3,6 +3,7 @@ from bs4 import BeautifulSoup
 import re
 from datetime import datetime, timezone
 from functools import reduce
+import socket
 
 class Product:
     def __init__(self, name, price, link, description=None, availability=None, currency='GBP'):
@@ -31,13 +32,45 @@ def convert_currency(price, from_currency, to_currency):
         return price * GBP_TO_MDL_RATE
     else:
         return price  # here it return original price if conversion not supported
+    
+
+#HTTP requst handle wsing TCP socket
+def get_http_response(url):
+    # Parse the URL
+    protocol, _, host, path = url.split('/', 3)
+    path = '/' + path
+
+    # Create a TCP socket
+    # using with to ensure closing after the block
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        # Connect to the host
+        s.connect((host, 80))
+        # Prepare the HTTP GET request
+        http_request = f"GET {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n"
+        # Send the request
+        s.sendall(http_request.encode())
+        # Receive the response
+        response = b''
+        while True:
+            data = s.recv(4096)
+            if not data:
+                break
+            response += data
+
+    # Split the response into headers and body
+    response = response.decode('utf-8')
+    headers, body = response.split('\r\n\r\n', 1)
+    return body
 
 #Base URL of the page to scrape
 base_url = 'http://books.toscrape.com/'
-response = requests.get(base_url)
+response = get_http_response(base_url)
 
-if response.status_code == 200:
-    soup = BeautifulSoup(response.text, 'html.parser')
+
+
+try:
+    response = get_http_response(base_url)
+    soup = BeautifulSoup(response, 'html.parser')
     products = []
     for product in soup.find_all('article', class_='product_pod'):
         name = product.h3.a['title']
@@ -54,14 +87,12 @@ if response.status_code == 200:
 
     # Function to scrape the product data futher
     def scrape_product_data(product_link):
-        response = requests.get(base_url + product_link)
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.text, 'html.parser')
-            description = soup.find('meta', {'name': 'description'})['content']
-            availability = soup.find('p', class_='instock availability').text.strip()
-            return description, availability
-        else:
-            return None, None
+        response = get_http_response(base_url + product_link)
+        soup = BeautifulSoup(response, 'html.parser')
+        description = soup.find('meta', {'name': 'description'})['content'] if soup.find('meta', {'name': 'description'}) else None
+        availability = soup.find('p', class_='instock availability').text.strip() if soup.find('p', class_='instock availability') else None
+        return description, availability
+            
 
     # Scrape the product data
     for product in products:
@@ -105,5 +136,5 @@ if response.status_code == 200:
         print(f"Description: {product.description[:100] if product.description else 'N/A'}...")
         print(f"Availability: {product.availability if product.availability else 'N/A'}")
         print("---")
-else:
-    print(f"Failed to retrieve the webpage. Status code: {response.status_code}")
+except Exception as e:
+    print(f"Failed to retrieve the webpage. Status code: {str(e)}")
