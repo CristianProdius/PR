@@ -9,7 +9,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 import json
 import xml.etree.ElementTree as ET
 
-
+'''
 #Request handler class for the HTTP server
 class RequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -55,7 +55,7 @@ class RequestHandler(BaseHTTPRequestHandler):
                 self.send_error(415, "Unsupported Media Type")
         else:
             self.send_error(404, "Not Found")
-
+'''
 
 class Product:
     def __init__(self, name, price, link, description=None, availability=None, currency='GBP'):
@@ -338,8 +338,9 @@ except Exception as e:
 
 
 # Test the serialization and deserialization
-test_serialization()
+#test_serialization()
 
+'''
 def run_server():
     PORT = 8000
     server_address = ('', PORT)
@@ -349,7 +350,7 @@ def run_server():
 
 if __name__ == "__main__":
     run_server()
-
+'''
 
 #this 2 comand to build and run the docker image
 #docker build -t lab1-image .
