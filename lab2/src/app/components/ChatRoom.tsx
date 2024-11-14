@@ -1,15 +1,15 @@
-// components/ChatRoom.tsx
 "use client";
 
 import { useEffect, useState, useRef } from "react";
 
 interface Message {
+  id: string;
   type: string;
   payload: {
     username?: string;
     message: string;
-    timestamp: string;
     users?: string[];
+    timestamp: string;
   };
 }
 
@@ -25,21 +25,18 @@ export default function ChatRoom({
   const [inputMessage, setInputMessage] = useState("");
   const [connected, setConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
+  const processedMessages = useRef(new Set<string>());
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
+  const connect = () => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
-  useEffect(() => {
     const ws = new WebSocket("ws://localhost:8080");
     wsRef.current = ws;
 
     ws.onopen = () => {
+      console.log("Connected to WebSocket");
       setConnected(true);
       ws.send(
         JSON.stringify({
@@ -52,7 +49,8 @@ export default function ChatRoom({
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        console.log("Received:", data);
+        if (data.id && processedMessages.current.has(data.id)) return;
+        if (data.id) processedMessages.current.add(data.id);
 
         switch (data.type) {
           case "users":
@@ -69,19 +67,44 @@ export default function ChatRoom({
     };
 
     ws.onclose = () => {
+      console.log("WebSocket connection closed");
       setConnected(false);
+      wsRef.current = null;
+
+      // Attempt to reconnect after 3 seconds
+      reconnectTimeoutRef.current = setTimeout(() => {
+        console.log("Attempting to reconnect...");
+        connect();
+      }, 3000);
     };
 
+    ws.onerror = (error) => {
+      console.error("WebSocket error:", error);
+      ws.close();
+    };
+  };
+
+  useEffect(() => {
+    connect();
+
     return () => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.close();
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.close();
       }
     };
   }, [username, room]);
 
   const sendMessage = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputMessage.trim() || !wsRef.current) return;
+    if (
+      !inputMessage.trim() ||
+      !wsRef.current ||
+      wsRef.current.readyState !== WebSocket.OPEN
+    )
+      return;
 
     wsRef.current.send(
       JSON.stringify({
@@ -106,7 +129,11 @@ export default function ChatRoom({
         <div className="p-4">
           {activeUsers.map((user, index) => (
             <div key={index} className="flex items-center space-x-2 mb-2">
-              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+              <div
+                className={`w-2 h-2 rounded-full ${
+                  connected ? "bg-green-500" : "bg-red-500"
+                }`}
+              ></div>
               <span className={user === username ? "font-bold" : ""}>
                 {user} {user === username && "(you)"}
               </span>
@@ -120,9 +147,9 @@ export default function ChatRoom({
         <div className="bg-white p-4 border-b">
           <h1 className="text-xl font-bold">Room: {room}</h1>
           <p className="text-sm text-gray-600">
-            Status:{" "}
+            Connected as: {username} | Status:{" "}
             <span className={connected ? "text-green-500" : "text-red-500"}>
-              {connected ? "Connected" : "Disconnected"}
+              {connected ? "Connected" : "Disconnected (Reconnecting...)"}
             </span>
           </p>
         </div>
@@ -145,11 +172,11 @@ export default function ChatRoom({
                     ? "bg-gray-200 text-gray-600 text-center"
                     : msg.payload.username === username
                     ? "bg-blue-500 text-white"
-                    : "bg-white"
+                    : "bg-white border"
                 }`}
               >
                 {msg.type !== "system" && msg.payload.username && (
-                  <p className="text-sm font-semibold">
+                  <p className="text-sm font-semibold mb-1">
                     {msg.payload.username === username
                       ? "You"
                       : msg.payload.username}
@@ -178,7 +205,7 @@ export default function ChatRoom({
             <button
               type="submit"
               disabled={!connected}
-              className="px-4 py-2 bg-blue-500 text-white rounded disabled:opacity-50"
+              className="px-4 py-2 bg-blue-500 text-white rounded disabled:opacity-50 hover:bg-blue-600"
             >
               Send
             </button>

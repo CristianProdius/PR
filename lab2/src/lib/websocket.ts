@@ -8,7 +8,7 @@ interface ChatUser {
 
 class ChatServer {
   private wss: WebSocketServer;
-  private rooms: Map<string, Set<ChatUser>>;
+  private rooms: Map<string, Map<string, ChatUser>>; // Using username as key to prevent duplicates
 
   constructor(port: number) {
     this.wss = new WebSocketServer({ port });
@@ -33,15 +33,24 @@ class ChatServer {
 
             // Create room if doesn't exist
             if (!this.rooms.has(room)) {
-              this.rooms.set(room, new Set());
+              this.rooms.set(room, new Map());
             }
 
-            // Add user to room
-            this.rooms.get(room)?.add(currentUser);
+            // Remove any existing connection for this username in this room
+            const roomUsers = this.rooms.get(room)!;
+            if (roomUsers.has(username)) {
+              const existingUser = roomUsers.get(username)!;
+              existingUser.ws.close();
+              roomUsers.delete(username);
+            }
+
+            // Add new user to room
+            roomUsers.set(username, currentUser);
 
             // Notify everyone in the room
             this.broadcastToRoom(room, {
               type: "system",
+              id: `join-${Date.now()}`,
               payload: {
                 message: `${username} has joined the room`,
                 timestamp: new Date().toISOString(),
@@ -56,6 +65,7 @@ class ChatServer {
             if (currentUser) {
               this.broadcastToRoom(currentUser.room, {
                 type: "message",
+                id: `msg-${Date.now()}`,
                 payload: {
                   username: currentUser.username,
                   message: data.payload.message,
@@ -73,23 +83,27 @@ class ChatServer {
     ws.on("close", () => {
       if (currentUser) {
         const { room, username } = currentUser;
-        this.rooms.get(room)?.delete(currentUser);
+        const roomUsers = this.rooms.get(room);
+        if (roomUsers) {
+          roomUsers.delete(username);
 
-        // Remove empty room
-        if (this.rooms.get(room)?.size === 0) {
-          this.rooms.delete(room);
+          // Remove empty room
+          if (roomUsers.size === 0) {
+            this.rooms.delete(room);
+          }
+
+          // Notify others
+          this.broadcastToRoom(room, {
+            type: "system",
+            id: `leave-${Date.now()}`,
+            payload: {
+              message: `${username} has left the room`,
+              timestamp: new Date().toISOString(),
+            },
+          });
+
+          this.updateUserList(room);
         }
-
-        // Notify others
-        this.broadcastToRoom(room, {
-          type: "system",
-          payload: {
-            message: `${username} has left the room`,
-            timestamp: new Date().toISOString(),
-          },
-        });
-
-        this.updateUserList(room);
       }
     });
   }
@@ -98,25 +112,27 @@ class ChatServer {
     const roomUsers = this.rooms.get(room);
     if (roomUsers) {
       const messageStr = JSON.stringify(message);
-      roomUsers.forEach((user) => {
+      for (const user of roomUsers.values()) {
         if (user.ws.readyState === WebSocket.OPEN) {
           user.ws.send(messageStr);
         }
-      });
+      }
     }
   }
 
   private updateUserList(room: string) {
-    const users = Array.from(this.rooms.get(room) || []).map(
-      (user) => user.username
-    );
-    this.broadcastToRoom(room, {
-      type: "users",
-      payload: {
-        users,
-        timestamp: new Date().toISOString(),
-      },
-    });
+    const roomUsers = this.rooms.get(room);
+    if (roomUsers) {
+      const users = Array.from(roomUsers.keys()); // Get usernames only
+      this.broadcastToRoom(room, {
+        type: "users",
+        id: `users-${Date.now()}`,
+        payload: {
+          users,
+          timestamp: new Date().toISOString(),
+        },
+      });
+    }
   }
 }
 
