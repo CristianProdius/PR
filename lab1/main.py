@@ -338,7 +338,8 @@ except Exception as e:
 
 
 # Test the serialization and deserialization
-#test_serialization()
+print("idkkk test ")
+test_serialization()
 
 '''
 def run_server():

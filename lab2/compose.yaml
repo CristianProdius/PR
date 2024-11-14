@@ -1,0 +1,8 @@
+services:
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_PASSWORD: crap
+      POSTGRES_DB: lab2-db
+    ports:
+      - "5432:5432"
